@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:http/http.dart' as http;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -274,7 +275,7 @@ class _MyHomePageState extends State<MyHomePage> {
         // Vibrate after 6 minutes (360 seconds)
         if (difference.inSeconds == 360) {
           if (await Vibration.hasVibrator() ?? false) {
-            Vibration.vibrate(duration: 3000); // 1 second long vibration
+            Vibration.vibrate(duration: 3000); // 3 seconds long vibration
           }
         }
       }
@@ -282,9 +283,13 @@ class _MyHomePageState extends State<MyHomePage> {
     // Write IP info to Firestore
     _writeIpInfoToFirestore();
     // Try to start the native service
-    platform.invokeMethod('startService', {
-      'clientId': _clientIdController.text,
-    });
+    try {
+      platform.invokeMethod('startService', {
+        'clientId': _clientIdController.text,
+      });
+    } catch (e) {
+      print('Error starting service: $e');
+    }
   }
 
   void _stopService() {
@@ -296,7 +301,11 @@ class _MyHomePageState extends State<MyHomePage> {
     _uptimeTimer?.cancel();
 
     // Try to stop the native service
-    platform.invokeMethod('stopService');
+    try {
+      platform.invokeMethod('stopService');
+    } catch (e) {
+      print('Error stopping service: $e');
+    }
   }
 
   @override
@@ -318,9 +327,9 @@ class _MyHomePageState extends State<MyHomePage> {
           children: [
             TextField(
               controller: _clientIdController,
-              decoration: const InputDecoration(
-                labelText: 'CastarSdk Client ID',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: Platform.isIOS ? 'Client ID' : 'CastarSdk Client ID',
+                border: const OutlineInputBorder(),
               ),
             ),
             const SizedBox(height: 16),
@@ -350,11 +359,17 @@ class _MyHomePageState extends State<MyHomePage> {
                             height: 20,
                             child: CircularProgressIndicator(strokeWidth: 2),
                           )
-                          : const Text('Start CastarSdk'),
+                          : Text(
+                            Platform.isIOS
+                                ? 'Start Service'
+                                : 'Start CastarSdk',
+                          ),
                 ),
                 ElevatedButton(
                   onPressed: _isServiceRunning ? _stopService : null,
-                  child: const Text('Stop CastarSdk'),
+                  child: Text(
+                    Platform.isIOS ? 'Stop Service' : 'Stop CastarSdk',
+                  ),
                 ),
               ],
             ),
