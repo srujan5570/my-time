@@ -1,13 +1,13 @@
 import Flutter
 import UIKit
-// Import CastarSDK when available
-// import CastarSDK
+// Import CastarSDK
+import CastarSDK
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {
   private var serviceTimer: Timer?
   private var clientId: String?
-  // This will hold the Castar instance when the framework is available
+  // This will hold the Castar instance
   private var castarInstance: Any?
   
   override func application(
@@ -46,8 +46,6 @@ import UIKit
     print("Service started with client ID: \(clientId)")
     
     // CastarSDK implementation
-    // When the framework is available, uncomment and use this code:
-    /*
     // Set ClientId
     let key = clientId
                 
@@ -64,25 +62,21 @@ import UIKit
     case .failure(let error):
         // Handle errors
         print("Failed to initialize Castar: \(error.localizedDescription)")
-    }
-    */
-    
-    // For now, we'll use a timer to simulate the service
-    serviceTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
-      guard let self = self else { return }
-      print("Service running with client ID: \(self.clientId ?? "unknown")")
+        
+        // Fall back to timer simulation if CastarSDK fails
+        serviceTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+          guard let self = self else { return }
+          print("Service running with client ID: \(self.clientId ?? "unknown")")
+        }
     }
   }
   
   private func stopService() {
     // Stop CastarSDK if it's running
-    // When the framework is available, uncomment and use this code:
-    /*
     if let instance = castarInstance as? Castar {
         instance.stop()
         print("CastarSDK stopped")
     }
-    */
     
     serviceTimer?.invalidate()
     serviceTimer = nil

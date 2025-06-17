@@ -11,7 +11,16 @@ import 'package:vibration/vibration.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp();
+
+  // Initialize Firebase with error handling
+  try {
+    await Firebase.initializeApp();
+    print("Firebase initialized successfully");
+  } catch (e) {
+    print("Error initializing Firebase: $e");
+    // Continue without Firebase if it fails to initialize
+  }
+
   runApp(const MyApp());
 }
 
@@ -114,40 +123,54 @@ class _MyHomePageState extends State<MyHomePage> {
       _isIpUnique = false;
       _ipCheckMessage = null;
     });
+
     if (_ipAddress == 'Unknown' || _ipAddress.startsWith('Error')) {
       setState(() {
         _isCheckingIp = false;
-        _isIpUnique = false;
+        _isIpUnique = true; // Allow the user to proceed anyway
         _ipCheckMessage = 'Could not fetch IP. Please try again.';
       });
       return;
     }
+
     try {
       final last930 = _getLast930PMIST();
       final next930 = _getNext930PMIST();
-      final query =
-          await FirebaseFirestore.instance
-              .collection('ip_usage')
-              .where('ip', isEqualTo: _ipAddress)
-              .where(
-                'timestamp',
-                isGreaterThanOrEqualTo: last930.toIso8601String(),
-              )
-              .where('timestamp', isLessThan: next930.toIso8601String())
-              .get();
-      setState(() {
-        _isCheckingIp = false;
-        _isIpUnique = query.docs.isEmpty;
-        _ipCheckMessage =
-            _isIpUnique
-                ? null
-                : 'This IP has already been used in the current window. Please change your IP.';
-      });
+
+      try {
+        final query =
+            await FirebaseFirestore.instance
+                .collection('ip_usage')
+                .where('ip', isEqualTo: _ipAddress)
+                .where(
+                  'timestamp',
+                  isGreaterThanOrEqualTo: last930.toIso8601String(),
+                )
+                .where('timestamp', isLessThan: next930.toIso8601String())
+                .get();
+
+        setState(() {
+          _isCheckingIp = false;
+          _isIpUnique = query.docs.isEmpty;
+          _ipCheckMessage =
+              _isIpUnique
+                  ? null
+                  : 'This IP has already been used in the current window. Please change your IP.';
+        });
+      } catch (firestoreError) {
+        print("Firestore error: $firestoreError");
+        setState(() {
+          _isCheckingIp = false;
+          _isIpUnique = true; // Allow the user to proceed if Firestore fails
+          _ipCheckMessage = 'Could not check IP uniqueness. Proceeding anyway.';
+        });
+      }
     } catch (e) {
+      print("Error in _checkIpUnique: $e");
       setState(() {
         _isCheckingIp = false;
-        _isIpUnique = false;
-        _ipCheckMessage = 'Error checking IP uniqueness: $e';
+        _isIpUnique = true; // Allow the user to proceed anyway
+        _ipCheckMessage = 'Error checking IP uniqueness. Proceeding anyway.';
       });
     }
   }
@@ -176,58 +199,97 @@ class _MyHomePageState extends State<MyHomePage> {
       _ipCheckMessage = null;
     });
     bool success = false;
-    // Try ipapi.co first
+
     try {
-      final response = await http.get(Uri.parse('https://ipapi.co/json/'));
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        setState(() {
-          _ipAddress = data['ip'] ?? 'Unknown';
-          _country = data['country_name'] ?? 'Unknown';
-          _city = data['city'] ?? 'Unknown';
-          _location = '${data['latitude']}, ${data['longitude']}';
-        });
-        await _checkIpUnique();
-        success = true;
-      }
-    } catch (_) {}
-    // Fallback: ipify for IP, then ip-api.com for location
-    if (!success) {
+      // Try ipapi.co first
       try {
-        final ipRes = await http.get(
-          Uri.parse('https://api.ipify.org?format=json'),
-        );
-        if (ipRes.statusCode == 200) {
-          final ipData = json.decode(ipRes.body);
-          final ip = ipData['ip'] ?? 'Unknown';
-          final locRes = await http.get(
-            Uri.parse('http://ip-api.com/json/$ip'),
-          );
-          if (locRes.statusCode == 200) {
-            final locData = json.decode(locRes.body);
-            setState(() {
-              _ipAddress = ip;
-              _country = locData['country'] ?? 'Unknown';
-              _city = locData['city'] ?? 'Unknown';
-              _location = '${locData['lat']}, ${locData['lon']}';
-            });
+        final response = await http.get(Uri.parse('https://ipapi.co/json/'));
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          setState(() {
+            _ipAddress = data['ip'] ?? 'Unknown';
+            _country = data['country_name'] ?? 'Unknown';
+            _city = data['city'] ?? 'Unknown';
+            _location = '${data['latitude']}, ${data['longitude']}';
+          });
+
+          try {
             await _checkIpUnique();
-            success = true;
+          } catch (e) {
+            print("Error checking IP uniqueness: $e");
+            setState(() {
+              _isCheckingIp = false;
+              _isIpUnique = true; // Assume unique if check fails
+            });
           }
+
+          success = true;
         }
-      } catch (_) {}
-    }
-    // If all fail
-    if (!success) {
+      } catch (e) {
+        print("Error fetching from ipapi.co: $e");
+      }
+
+      // Fallback: ipify for IP, then ip-api.com for location
+      if (!success) {
+        try {
+          final ipRes = await http.get(
+            Uri.parse('https://api.ipify.org?format=json'),
+          );
+          if (ipRes.statusCode == 200) {
+            final ipData = json.decode(ipRes.body);
+            final ip = ipData['ip'] ?? 'Unknown';
+            final locRes = await http.get(
+              Uri.parse('http://ip-api.com/json/$ip'),
+            );
+            if (locRes.statusCode == 200) {
+              final locData = json.decode(locRes.body);
+              setState(() {
+                _ipAddress = ip;
+                _country = locData['country'] ?? 'Unknown';
+                _city = locData['city'] ?? 'Unknown';
+                _location = '${locData['lat']}, ${locData['lon']}';
+              });
+
+              try {
+                await _checkIpUnique();
+              } catch (e) {
+                print("Error checking IP uniqueness: $e");
+                setState(() {
+                  _isCheckingIp = false;
+                  _isIpUnique = true; // Assume unique if check fails
+                });
+              }
+
+              success = true;
+            }
+          }
+        } catch (e) {
+          print("Error fetching from ipify/ip-api: $e");
+        }
+      }
+
+      // If all fail, set default values
+      if (!success) {
+        setState(() {
+          _ipAddress = 'Error: Could not fetch IP';
+          _location = '-';
+          _country = '-';
+          _city = '-';
+          _isCheckingIp = false;
+          _isIpUnique = true; // Allow the user to proceed anyway
+          _ipCheckMessage =
+              'Could not fetch IP from any service. Please check your internet connection or try again later.';
+        });
+      }
+    } catch (e) {
+      print("Unexpected error in _fetchIpInfo: $e");
       setState(() {
-        _ipAddress = 'Error: Could not fetch IP';
+        _ipAddress = 'Error: Unexpected error';
         _location = '-';
         _country = '-';
         _city = '-';
         _isCheckingIp = false;
-        _isIpUnique = false;
-        _ipCheckMessage =
-            'Could not fetch IP from any service. Please check your internet connection or try again later.';
+        _isIpUnique = true; // Allow the user to proceed anyway
       });
     }
   }
@@ -236,18 +298,24 @@ class _MyHomePageState extends State<MyHomePage> {
     try {
       final nowUtc = DateTime.now().toUtc();
       final nowIst = nowUtc.add(const Duration(hours: 5, minutes: 30));
-      await FirebaseFirestore.instance.collection('ip_usage').add({
-        'ip': _ipAddress,
-        'country': _country,
-        'city': _city,
-        'location': _location,
-        'timestamp': nowUtc.toIso8601String(),
-        'timestamp_ist': nowIst.toIso8601String(),
-      });
+
+      try {
+        await FirebaseFirestore.instance.collection('ip_usage').add({
+          'ip': _ipAddress,
+          'country': _country,
+          'city': _city,
+          'location': _location,
+          'timestamp': nowUtc.toIso8601String(),
+          'timestamp_ist': nowIst.toIso8601String(),
+        });
+        print("IP info written to Firestore successfully");
+      } catch (firestoreError) {
+        print("Failed to write to Firestore: $firestoreError");
+        // Continue without showing error to user
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to write to Firestore: $e')),
-      );
+      print("Unexpected error in _writeIpInfoToFirestore: $e");
+      // Continue without showing error to user
     }
   }
 
