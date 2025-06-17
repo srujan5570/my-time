@@ -1,8 +1,6 @@
 name: iOS-ipa-build
 
 on:
-  push:
-    branches: [ master ]
   workflow_dispatch:
 
 jobs:
@@ -16,41 +14,6 @@ jobs:
         with:
           channel: 'stable'
           architecture: x64
-          
-      # Verify the framework exists
-      - name: Verify CastarSDK Framework
-        run: |
-          if [ -d "ios/Frameworks/CastarSDK.framework" ]; then
-            echo "CastarSDK framework found in repository"
-          else
-            echo "Error: CastarSDK framework not found in ios/Frameworks/"
-            exit 1
-          fi
-      
-      # Create podspec file if it doesn't exist
-      - name: Create CastarSDK podspec
-        run: |
-          if [ ! -f "ios/Frameworks/CastarSDK.podspec" ]; then
-            cat > ios/Frameworks/CastarSDK.podspec << EOL
-          Pod::Spec.new do |s|
-            s.name             = 'CastarSDK'
-            s.version          = '1.0.0'
-            s.summary          = 'CastarSDK for iOS'
-            s.description      = 'CastarSDK for iOS applications'
-            s.homepage         = 'https://example.com'
-            s.license          = { :type => 'Commercial', :text => 'Proprietary' }
-            s.author           = { 'CastarSDK' => 'info@example.com' }
-            s.source           = { :path => '.' }
-            s.ios.deployment_target = '12.0'
-            s.ios.vendored_frameworks = 'CastarSDK.framework'
-            s.swift_version = '5.0'
-          end
-          EOL
-            echo "Created CastarSDK.podspec file"
-          else
-            echo "CastarSDK.podspec file already exists"
-          fi
-          
       - run: flutter pub get
       
       - run: pod repo update
@@ -58,24 +21,21 @@ jobs:
 
       - run: flutter build ios --release --no-codesign
 
-      - run: mkdir -p build/ios/iphoneos/Payload
-        
-      - run: cp -r build/ios/iphoneos/Runner.app build/ios/iphoneos/Payload/
+      - run: mkdir Payload
+        working-directory: build/ios/iphoneos
+
+      - run: mv Runner.app/ Payload
+        working-directory: build/ios/iphoneos
 
       - name: Zip output
-        run: cd build/ios/iphoneos && zip -r FlutterIpaExport.ipa Payload
+        run: zip -qq -r -9 FlutterIpaExport.ipa Payload
+        working-directory: build/ios/iphoneos
 
-      - name: Upload IPA as artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: FlutterIpaExport.ipa
-          path: build/ios/iphoneos/FlutterIpaExport.ipa
-
-      - name: Upload to Release
+      - name: Upload binaries to release
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
           file: build/ios/iphoneos/FlutterIpaExport.ipa
           tag: v1.0
           overwrite: true
-          body: "iOS release build" 
+          body: "This is first release" 

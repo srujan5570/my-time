@@ -1,84 +1,170 @@
 # My Time
 
-A Flutter application that integrates with CastarSDK for both Android and iOS platforms to track time and display uptime.
+A Flutter application that integrates with CastarSdk for both Android and iOS.
 
 ## Features
 
-- Client ID input for CastarSDK initialization
-- Start/Stop functionality for CastarSDK service
-- Real-time uptime tracking with HH:MM:SS format display
-- IP information display with location details
-- Vibration notification after 6 minutes of uptime
+- Client ID input
+- Start/Stop CastarSdk service
+- Uptime display (HH:MM:SS format)
+- IP information display
+- Vibration notifications
 
-## Setup Instructions
+## CastarSDK Integration
 
-### Prerequisites
+### Android Integration
 
-- Flutter SDK (latest stable version)
-- Android Studio / Xcode
-- CastarSDK for Android (.aar file)
-- CastarSDK for iOS (.framework file)
-
-### Android Setup
-
-1. Place the `CastarSdk.aar` file in the `android/app/libs/` directory
-2. The project is already configured to use the SDK with:
-   - Method channel for Flutter-Native communication
-   - CastarSdk integration in MainActivity.kt and MyApplication.kt
-   - Internet permissions in AndroidManifest.xml
-   - minSdk set to 24 for compatibility
-
-### iOS Setup
-
-1. Download the CastarSDK.framework file from the developer portal
-2. Follow one of these methods to integrate:
-
-#### Automated Setup (Recommended)
-1. Navigate to the iOS directory:
+1. Add the CastarSdk.aar file to the `android/app/libs` directory
+2. Update `android/app/build.gradle.kts` to include the AAR dependency:
+   ```kotlin
+   dependencies {
+       implementation(files("libs/CastarSdk.aar"))
+   }
    ```
-   cd ios
+3. Update `AndroidManifest.xml` to add required permissions:
+   ```xml
+   <uses-permission android:name="android.permission.INTERNET" />
    ```
-2. Run the setup script:
+4. Create a custom Application class to initialize the SDK:
+   ```kotlin
+   class MyApplication : Application() {
+       override fun onCreate() {
+           super.onCreate()
+           // CastarSdk initialization will be done when requested
+       }
+   }
    ```
-   ./setup_castarsdk.sh /path/to/CastarSDK.framework
+5. Implement the MethodChannel in MainActivity to communicate with Flutter:
+   ```kotlin
+   private val CHANNEL = "com.example.my_time/service"
+   
+   override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
+       super.configureFlutterEngine(flutterEngine)
+       MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL).setMethodCallHandler { call, result ->
+           when (call.method) {
+               "startService" -> {
+                   val clientId = call.argument<String>("clientId")
+                   if (clientId != null) {
+                       CastarSdk.init(this, clientId)
+                       CastarSdk.start()
+                       result.success(true)
+                   } else {
+                       result.error("INVALID_ARGUMENTS", "Client ID is required", null)
+                   }
+               }
+               "stopService" -> {
+                   CastarSdk.stop()
+                   result.success(true)
+               }
+               else -> result.notImplemented()
+           }
+       }
+   }
    ```
-3. Open the Xcode workspace and verify the integration:
+
+### iOS Integration
+
+1. Add the CastarSDK.framework to the `ios/Frameworks` directory
+2. Update the Podfile to include the framework:
+   ```ruby
+   platform :ios, '12.0'
+   
+   target 'Runner' do
+     use_frameworks!
+     
+     flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
+     
+     # Add CastarSDK framework
+     pod 'CastarSDK', :path => 'Frameworks/CastarSDK.framework'
+   end
    ```
-   open Runner.xcworkspace
+3. Update Info.plist to add required permissions:
+   ```xml
+   <key>NSAppTransportSecurity</key>
+   <dict>
+     <key>NSAllowsArbitraryLoads</key>
+     <true/>
+   </dict>
+   <key>UIBackgroundModes</key>
+   <array>
+     <string>fetch</string>
+     <string>processing</string>
+   </array>
+   ```
+4. Implement the MethodChannel in AppDelegate to communicate with Flutter:
+   ```swift
+   import Flutter
+   import UIKit
+   import CastarSDK
+   
+   @objc class AppDelegate: FlutterAppDelegate {
+     private var castarInstance: Castar?
+     
+     override func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+       let controller = window?.rootViewController as! FlutterViewController
+       let channel = FlutterMethodChannel(name: "com.example.my_time/service", binaryMessenger: controller.binaryMessenger)
+       
+       channel.setMethodCallHandler { [weak self] (call, result) in
+         guard let self = self else { return }
+         
+         switch call.method {
+         case "startService":
+           if let args = call.arguments as? [String: Any],
+              let clientId = args["clientId"] as? String {
+             self.startCastarSdk(clientId: clientId)
+             result(true)
+           } else {
+             result(FlutterError(code: "INVALID_ARGUMENTS", message: "Client ID is required", details: nil))
+           }
+         case "stopService":
+           self.stopCastarSdk()
+           result(true)
+         default:
+           result(FlutterMethodNotImplemented)
+         }
+       }
+       
+       return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+     }
+     
+     private func startCastarSdk(clientId: String) {
+       let result = Castar.createInstance(devKey: clientId)
+       
+       switch result {
+       case .success(let instance):
+         castarInstance = instance
+         castarInstance?.start()
+       case .failure(let error):
+         print("Failed to initialize CastarSDK: \(error.localizedDescription)")
+       }
+     }
+     
+     private func stopCastarSdk() {
+       castarInstance?.stop()
+       castarInstance = nil
+     }
+   }
    ```
 
-#### Manual Setup
-1. Follow the detailed instructions in `ios/MANUAL_SETUP.md`
+## Building the App
 
-## Usage
+### Android Build
+```
+flutter build apk --release
+```
 
-1. Launch the app
-2. Enter your CastarSDK Client ID
-3. Press "Start CastarSDK" to begin tracking time
-4. The uptime will be displayed in HH:MM:SS format
-5. Press "Stop CastarSDK" to stop the service
+### iOS Build
+```
+cd ios
+pod install
+cd ..
+flutter build ios --release --no-codesign
+```
 
-## GitHub Actions
+## GitHub Actions Workflow
 
-The project includes GitHub Actions workflows for both Android and iOS builds:
+The project includes GitHub Actions workflows for automated builds:
+- Android APK build
+- iOS IPA build
 
-- Android: Builds an APK file
-- iOS: Builds an IPA file without code signing (for testing purposes)
-
-To use the GitHub Actions workflows, push your changes to the repository and the workflows will run automatically.
-
-## Troubleshooting
-
-If you encounter issues with the CastarSDK integration:
-
-- For Android, check the `android/app/build.gradle.kts` file for proper dependencies
-- For iOS, refer to the troubleshooting section in `ios/MANUAL_SETUP.md`
-
-## Dependencies
-
-- flutter/material.dart - UI components
-- flutter/services.dart - Method channel for native communication
-- http - For IP information fetching
-- firebase_core & cloud_firestore - For IP uniqueness checking
-- vibration - For vibration notifications
-- CastarSDK - Native SDK for Android and iOS
+To trigger a build, go to the Actions tab in your GitHub repository and manually trigger the workflow.
