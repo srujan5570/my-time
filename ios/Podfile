@@ -33,9 +33,8 @@ target 'Runner' do
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   
-  # This is where you would add the CastarSDK pod if it were available via CocoaPods
-  # pod 'CastarSDK', '~> x.y.z'
-  # Since CastarSDK is provided as a framework, we'll add it manually in Xcode
+  # Add local CastarSDK podspec
+  pod 'CastarSDK', :path => '.'
 end
 
 post_install do |installer|
@@ -53,8 +52,9 @@ post_install do |installer|
       # Minimum deployment target
       config.build_settings['IPHONEOS_DEPLOYMENT_TARGET'] = '12.0'
       
-      # Enable bitcode if required by CastarSDK
-      # config.build_settings['ENABLE_BITCODE'] = 'YES'
+      # Add framework search paths for CastarSDK
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] ||= ['$(inherited)']
+      config.build_settings['FRAMEWORK_SEARCH_PATHS'] << '${PODS_ROOT}/../Frameworks'
       
       # Add any other build settings required by CastarSDK
     end

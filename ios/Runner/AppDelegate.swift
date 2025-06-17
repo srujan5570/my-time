@@ -1,7 +1,7 @@
 import Flutter
 import UIKit
-// Uncomment the import line below
-import CastarSDK
+// Import CastarSDK using @_exported to make it available to other files
+@_exported import CastarSDK
 
 @main
 @objc class AppDelegate: FlutterAppDelegate {

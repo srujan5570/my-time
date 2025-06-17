@@ -1,5 +1,5 @@
 import Foundation
-import CastarSDK
+@_exported import CastarSDK
 
 extension Castar {
     static func createInstance(devKey: String) -> Result<Castar, Error> {
