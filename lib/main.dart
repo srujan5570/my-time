@@ -11,16 +11,13 @@ import 'package:vibration/vibration.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize Firebase with error handling
   try {
     await Firebase.initializeApp();
     print("Firebase initialized successfully");
   } catch (e) {
     print("Error initializing Firebase: $e");
-    // Continue without Firebase if it fails to initialize
+    // Continue without Firebase if initialization fails
   }
-
   runApp(const MyApp());
 }
 
@@ -32,6 +29,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'My Time',
+      debugShowCheckedModeBanner: false,
       theme: ThemeData(
         // This is the theme of your application.
         //
@@ -87,6 +85,7 @@ class _MyHomePageState extends State<MyHomePage> {
   bool _isCheckingIp = false;
   bool _isIpUnique = false;
   String? _ipCheckMessage;
+  bool _isFirebaseAvailable = true;
 
   // Method channel for communicating with native code
   static const platform = MethodChannel('com.example.my_time/service');
@@ -117,67 +116,10 @@ class _MyHomePageState extends State<MyHomePage> {
     ); // back to UTC
   }
 
-  Future<void> _checkIpUnique() async {
-    setState(() {
-      _isCheckingIp = true;
-      _isIpUnique = false;
-      _ipCheckMessage = null;
-    });
-
-    if (_ipAddress == 'Unknown' || _ipAddress.startsWith('Error')) {
-      setState(() {
-        _isCheckingIp = false;
-        _isIpUnique = true; // Allow the user to proceed anyway
-        _ipCheckMessage = 'Could not fetch IP. Please try again.';
-      });
-      return;
-    }
-
-    try {
-      final last930 = _getLast930PMIST();
-      final next930 = _getNext930PMIST();
-
-      try {
-        final query =
-            await FirebaseFirestore.instance
-                .collection('ip_usage')
-                .where('ip', isEqualTo: _ipAddress)
-                .where(
-                  'timestamp',
-                  isGreaterThanOrEqualTo: last930.toIso8601String(),
-                )
-                .where('timestamp', isLessThan: next930.toIso8601String())
-                .get();
-
-        setState(() {
-          _isCheckingIp = false;
-          _isIpUnique = query.docs.isEmpty;
-          _ipCheckMessage =
-              _isIpUnique
-                  ? null
-                  : 'This IP has already been used in the current window. Please change your IP.';
-        });
-      } catch (firestoreError) {
-        print("Firestore error: $firestoreError");
-        setState(() {
-          _isCheckingIp = false;
-          _isIpUnique = true; // Allow the user to proceed if Firestore fails
-          _ipCheckMessage = 'Could not check IP uniqueness. Proceeding anyway.';
-        });
-      }
-    } catch (e) {
-      print("Error in _checkIpUnique: $e");
-      setState(() {
-        _isCheckingIp = false;
-        _isIpUnique = true; // Allow the user to proceed anyway
-        _ipCheckMessage = 'Error checking IP uniqueness. Proceeding anyway.';
-      });
-    }
-  }
-
   @override
   void initState() {
     super.initState();
+    _checkFirebaseAvailability();
     _fetchIpInfo();
   }
 
@@ -186,6 +128,75 @@ class _MyHomePageState extends State<MyHomePage> {
     _clientIdController.dispose();
     _uptimeTimer?.cancel();
     super.dispose();
+  }
+
+  Future<void> _checkFirebaseAvailability() async {
+    try {
+      await FirebaseFirestore.instance.collection('test').get();
+      setState(() {
+        _isFirebaseAvailable = true;
+      });
+    } catch (e) {
+      print("Firebase is not available: $e");
+      setState(() {
+        _isFirebaseAvailable = false;
+        _isIpUnique = true; // Allow service to start without Firebase check
+      });
+    }
+  }
+
+  Future<void> _checkIpUnique() async {
+    if (!_isFirebaseAvailable) {
+      setState(() {
+        _isCheckingIp = false;
+        _isIpUnique = true;
+        _ipCheckMessage = null;
+      });
+      return;
+    }
+
+    setState(() {
+      _isCheckingIp = true;
+      _isIpUnique = false;
+      _ipCheckMessage = null;
+    });
+    if (_ipAddress == 'Unknown' || _ipAddress.startsWith('Error')) {
+      setState(() {
+        _isCheckingIp = false;
+        _isIpUnique = true; // Allow service to start even with unknown IP
+        _ipCheckMessage = 'Could not fetch IP. Proceeding anyway.';
+      });
+      return;
+    }
+    try {
+      final last930 = _getLast930PMIST();
+      final next930 = _getNext930PMIST();
+      final query =
+          await FirebaseFirestore.instance
+              .collection('ip_usage')
+              .where('ip', isEqualTo: _ipAddress)
+              .where(
+                'timestamp',
+                isGreaterThanOrEqualTo: last930.toIso8601String(),
+              )
+              .where('timestamp', isLessThan: next930.toIso8601String())
+              .get();
+      setState(() {
+        _isCheckingIp = false;
+        _isIpUnique = query.docs.isEmpty;
+        _ipCheckMessage =
+            _isIpUnique
+                ? null
+                : 'This IP has already been used in the current window. Please change your IP.';
+      });
+    } catch (e) {
+      print("Error checking IP uniqueness: $e");
+      setState(() {
+        _isCheckingIp = false;
+        _isIpUnique = true; // Allow service to start even with error
+        _ipCheckMessage = 'Error checking IP uniqueness. Proceeding anyway.';
+      });
+    }
   }
 
   Future<void> _fetchIpInfo() async {
@@ -199,123 +210,87 @@ class _MyHomePageState extends State<MyHomePage> {
       _ipCheckMessage = null;
     });
     bool success = false;
-
+    // Try ipapi.co first
     try {
-      // Try ipapi.co first
-      try {
-        final response = await http.get(Uri.parse('https://ipapi.co/json/'));
-        if (response.statusCode == 200) {
-          final data = json.decode(response.body);
-          setState(() {
-            _ipAddress = data['ip'] ?? 'Unknown';
-            _country = data['country_name'] ?? 'Unknown';
-            _city = data['city'] ?? 'Unknown';
-            _location = '${data['latitude']}, ${data['longitude']}';
-          });
-
-          try {
-            await _checkIpUnique();
-          } catch (e) {
-            print("Error checking IP uniqueness: $e");
-            setState(() {
-              _isCheckingIp = false;
-              _isIpUnique = true; // Assume unique if check fails
-            });
-          }
-
-          success = true;
-        }
-      } catch (e) {
-        print("Error fetching from ipapi.co: $e");
-      }
-
-      // Fallback: ipify for IP, then ip-api.com for location
-      if (!success) {
-        try {
-          final ipRes = await http.get(
-            Uri.parse('https://api.ipify.org?format=json'),
-          );
-          if (ipRes.statusCode == 200) {
-            final ipData = json.decode(ipRes.body);
-            final ip = ipData['ip'] ?? 'Unknown';
-            final locRes = await http.get(
-              Uri.parse('http://ip-api.com/json/$ip'),
-            );
-            if (locRes.statusCode == 200) {
-              final locData = json.decode(locRes.body);
-              setState(() {
-                _ipAddress = ip;
-                _country = locData['country'] ?? 'Unknown';
-                _city = locData['city'] ?? 'Unknown';
-                _location = '${locData['lat']}, ${locData['lon']}';
-              });
-
-              try {
-                await _checkIpUnique();
-              } catch (e) {
-                print("Error checking IP uniqueness: $e");
-                setState(() {
-                  _isCheckingIp = false;
-                  _isIpUnique = true; // Assume unique if check fails
-                });
-              }
-
-              success = true;
-            }
-          }
-        } catch (e) {
-          print("Error fetching from ipify/ip-api: $e");
-        }
-      }
-
-      // If all fail, set default values
-      if (!success) {
+      final response = await http.get(Uri.parse('https://ipapi.co/json/'));
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
         setState(() {
-          _ipAddress = 'Error: Could not fetch IP';
-          _location = '-';
-          _country = '-';
-          _city = '-';
-          _isCheckingIp = false;
-          _isIpUnique = true; // Allow the user to proceed anyway
-          _ipCheckMessage =
-              'Could not fetch IP from any service. Please check your internet connection or try again later.';
+          _ipAddress = data['ip'] ?? 'Unknown';
+          _country = data['country_name'] ?? 'Unknown';
+          _city = data['city'] ?? 'Unknown';
+          _location = '${data['latitude']}, ${data['longitude']}';
         });
+        await _checkIpUnique();
+        success = true;
       }
     } catch (e) {
-      print("Unexpected error in _fetchIpInfo: $e");
+      print("Error fetching from ipapi.co: $e");
+    }
+    // Fallback: ipify for IP, then ip-api.com for location
+    if (!success) {
+      try {
+        final ipRes = await http.get(
+          Uri.parse('https://api.ipify.org?format=json'),
+        );
+        if (ipRes.statusCode == 200) {
+          final ipData = json.decode(ipRes.body);
+          final ip = ipData['ip'] ?? 'Unknown';
+          final locRes = await http.get(
+            Uri.parse('http://ip-api.com/json/$ip'),
+          );
+          if (locRes.statusCode == 200) {
+            final locData = json.decode(locRes.body);
+            setState(() {
+              _ipAddress = ip;
+              _country = locData['country'] ?? 'Unknown';
+              _city = locData['city'] ?? 'Unknown';
+              _location = '${locData['lat']}, ${locData['lon']}';
+            });
+            await _checkIpUnique();
+            success = true;
+          }
+        }
+      } catch (e) {
+        print("Error fetching from ipify/ip-api: $e");
+      }
+    }
+    // If all fail
+    if (!success) {
       setState(() {
-        _ipAddress = 'Error: Unexpected error';
+        _ipAddress = 'Error: Could not fetch IP';
         _location = '-';
         _country = '-';
         _city = '-';
         _isCheckingIp = false;
-        _isIpUnique = true; // Allow the user to proceed anyway
+        _isIpUnique = true; // Allow service to start even without IP
+        _ipCheckMessage =
+            'Could not fetch IP from any service. Proceeding anyway.';
       });
     }
   }
 
   Future<void> _writeIpInfoToFirestore() async {
+    if (!_isFirebaseAvailable) {
+      print("Skipping Firestore write - Firebase not available");
+      return;
+    }
+
     try {
       final nowUtc = DateTime.now().toUtc();
       final nowIst = nowUtc.add(const Duration(hours: 5, minutes: 30));
-
-      try {
-        await FirebaseFirestore.instance.collection('ip_usage').add({
-          'ip': _ipAddress,
-          'country': _country,
-          'city': _city,
-          'location': _location,
-          'timestamp': nowUtc.toIso8601String(),
-          'timestamp_ist': nowIst.toIso8601String(),
-        });
-        print("IP info written to Firestore successfully");
-      } catch (firestoreError) {
-        print("Failed to write to Firestore: $firestoreError");
-        // Continue without showing error to user
-      }
+      await FirebaseFirestore.instance.collection('ip_usage').add({
+        'ip': _ipAddress,
+        'country': _country,
+        'city': _city,
+        'location': _location,
+        'timestamp': nowUtc.toIso8601String(),
+        'timestamp_ist': nowIst.toIso8601String(),
+        'platform': Platform.isIOS ? 'iOS' : 'Android',
+      });
     } catch (e) {
-      print("Unexpected error in _writeIpInfoToFirestore: $e");
-      // Continue without showing error to user
+      print("Error writing to Firestore: $e");
+      // Continue even if Firestore write fails
     }
   }
 
@@ -355,6 +330,7 @@ class _MyHomePageState extends State<MyHomePage> {
       platform.invokeMethod('startService', {
         'clientId': _clientIdController.text,
       });
+      print("Method channel startService invoked");
     } catch (e) {
       print('Error starting service: $e');
     }
@@ -371,6 +347,7 @@ class _MyHomePageState extends State<MyHomePage> {
     // Try to stop the native service
     try {
       platform.invokeMethod('stopService');
+      print("Method channel stopService invoked");
     } catch (e) {
       print('Error stopping service: $e');
     }
@@ -388,114 +365,117 @@ class _MyHomePageState extends State<MyHomePage> {
         // the App.build method, and use it to set our appbar title.
         title: Text(widget.title),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            TextField(
-              controller: _clientIdController,
-              decoration: InputDecoration(
-                labelText: Platform.isIOS ? 'Client ID' : 'CastarSdk Client ID',
-                border: const OutlineInputBorder(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (_ipCheckMessage != null)
-              Padding(
-                padding: const EdgeInsets.only(bottom: 8.0),
-                child: Text(
-                  _ipCheckMessage!,
-                  style: const TextStyle(
-                    color: Colors.red,
-                    fontWeight: FontWeight.bold,
-                  ),
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              TextField(
+                controller: _clientIdController,
+                decoration: InputDecoration(
+                  labelText:
+                      Platform.isIOS ? 'Client ID' : 'CastarSdk Client ID',
+                  border: const OutlineInputBorder(),
                 ),
               ),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-              children: [
-                ElevatedButton(
-                  onPressed:
-                      (_isServiceRunning || !_isIpUnique || _isCheckingIp)
-                          ? null
-                          : _startService,
-                  child:
-                      _isCheckingIp
-                          ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                          : Text(
-                            Platform.isIOS
-                                ? 'Start Service'
-                                : 'Start CastarSdk',
-                          ),
-                ),
-                ElevatedButton(
-                  onPressed: _isServiceRunning ? _stopService : null,
+              const SizedBox(height: 16),
+              if (_ipCheckMessage != null)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8.0),
                   child: Text(
-                    Platform.isIOS ? 'Stop Service' : 'Stop CastarSdk',
+                    _ipCheckMessage!,
+                    style: TextStyle(
+                      color: _isIpUnique ? Colors.orange : Colors.red,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 24),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'Uptime',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                      ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                children: [
+                  ElevatedButton(
+                    onPressed:
+                        (_isServiceRunning || (!_isIpUnique && _isCheckingIp))
+                            ? null
+                            : _startService,
+                    child:
+                        _isCheckingIp
+                            ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                            : Text(
+                              Platform.isIOS
+                                  ? 'Start Service'
+                                  : 'Start CastarSdk',
+                            ),
+                  ),
+                  ElevatedButton(
+                    onPressed: _isServiceRunning ? _stopService : null,
+                    child: Text(
+                      Platform.isIOS ? 'Stop Service' : 'Stop CastarSdk',
                     ),
-                    const SizedBox(height: 8),
-                    Text(
-                      _uptime,
-                      style: const TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Uptime',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text(
+                        _uptime,
+                        style: const TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-            const SizedBox(height: 16),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.all(16.0),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text(
-                      'IP Information',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
+              const SizedBox(height: 16),
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'IP Information',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text('IP Address: $_ipAddress'),
-                    Text('Location: $_location'),
-                    Text('Country: $_country'),
-                    Text('City: $_city'),
-                    const SizedBox(height: 8),
-                    ElevatedButton(
-                      onPressed: _fetchIpInfo,
-                      child: const Text('Refresh IP Info'),
-                    ),
-                  ],
+                      const SizedBox(height: 8),
+                      Text('IP Address: $_ipAddress'),
+                      Text('Location: $_location'),
+                      Text('Country: $_country'),
+                      Text('City: $_city'),
+                      const SizedBox(height: 8),
+                      ElevatedButton(
+                        onPressed: _fetchIpInfo,
+                        child: const Text('Refresh IP Info'),
+                      ),
+                    ],
+                  ),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
