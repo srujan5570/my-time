@@ -164,7 +164,28 @@ flutter build ios --release --no-codesign
 ## GitHub Actions Workflow
 
 The project includes GitHub Actions workflows for automated builds:
+
+### Automatic Builds
+Every push to the `master` or `main` branch automatically triggers:
 - Android APK build
 - iOS IPA build
 
-To trigger a build, go to the Actions tab in your GitHub repository and manually trigger the workflow.
+These builds are available as artifacts in the GitHub Actions tab.
+
+### Release Builds
+For versioned releases with proper tags, use the release workflow:
+
+1. **Tag-based release**:
+   ```bash
+   git tag v1.0.0
+   git push --tags
+   ```
+
+2. **Manual release**:
+   - Go to Actions tab in GitHub
+   - Select "Release Build" workflow
+   - Click "Run workflow"
+   - Enter version number (e.g., "1.0.0")
+   - Click "Run workflow"
+
+The release workflow creates a proper GitHub release with both APK and IPA files attached.

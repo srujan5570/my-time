@@ -27,7 +27,9 @@
 - `lib/main.dart` (already had MethodChannel implementation)
 
 ### CI/CD
-- `.github/workflows/ios-build.yml`
+- `.github/workflows/ios-build.yml` - Builds iOS IPA on every push to master/main
+- `.github/workflows/android-build.yml` - Builds Android APK on every push to master/main
+- `.github/workflows/release-build.yml` - Creates versioned releases with both APK and IPA
 
 ## Next Steps
 
@@ -43,11 +45,26 @@
    - Test starting and stopping the SDK with a valid client ID
 
 4. **Deploy**:
-   - Use GitHub Actions workflows to build APK and IPA files
-   - Distribute to testers or app stores
+   - Automatic builds will run on every push to master/main
+   - For versioned releases, either:
+     - Push a tag (e.g., `git tag v1.0.0 && git push --tags`)
+     - Manually trigger the release-build workflow with a version number
 
 ## Known Issues
 
 - The CastarSDK files need to be downloaded separately and placed in the correct locations
 - iOS integration requires macOS for building and testing
-- Minimum SDK versions required: Android 24+, iOS 12.0+ 
+- Minimum SDK versions required: Android 24+, iOS 12.0+
+
+## GitHub Workflows
+
+### iOS Build Workflow
+Automatically builds an iOS IPA file on every push to master/main branch.
+
+### Android Build Workflow
+Automatically builds an Android APK file on every push to master/main branch.
+
+### Release Build Workflow
+Creates a proper versioned release with both APK and IPA files. This workflow can be triggered in two ways:
+1. By pushing a tag with version format (e.g., `v1.0.0`)
+2. By manually triggering the workflow and specifying a version number 
