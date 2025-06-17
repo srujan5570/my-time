@@ -43,6 +43,29 @@ fi
 
 echo -e "${GREEN}CastarSDK framework copied successfully!${NC}"
 
+# Create podspec file
+echo "Creating podspec file..."
+cat > Frameworks/CastarSDK.podspec << EOL
+Pod::Spec.new do |s|
+  s.name             = 'CastarSDK'
+  s.version          = '1.0.0'
+  s.summary          = 'CastarSDK for iOS'
+  s.description      = 'CastarSDK SDK for iOS helps you make money with iOS apps.'
+  s.homepage         = 'https://castar.com'
+  s.license          = { :type => 'Commercial', :text => 'Copyright (c) 2024 Castar. All rights reserved.' }
+  s.author           = { 'Castar' => 'support@castar.com' }
+  s.source           = { :path => '.' }
+  s.platform         = :ios, '12.0'
+  s.preserve_paths   = 'CastarSDK.framework'
+  s.vendored_frameworks = 'CastarSDK.framework'
+  s.frameworks       = 'Foundation', 'UIKit'
+  s.requires_arc     = true
+  s.swift_version    = '5.0'
+end
+EOL
+
+echo -e "${GREEN}Podspec file created successfully!${NC}"
+
 # Update Podfile
 echo "Updating Podfile..."
 if [ -f "Podfile" ]; then
@@ -51,7 +74,7 @@ if [ -f "Podfile" ]; then
     echo "CastarSDK already in Podfile."
   else
     # Add CastarSDK to Podfile
-    sed -i '' 's/target '\''Runner'\'' do/target '\''Runner'\'' do\n  # Add CastarSDK framework\n  pod '\''CastarSDK'\'', :path => '\''Frameworks\/CastarSDK.framework'\''/g' Podfile
+    sed -i '' 's/target '\''Runner'\'' do/target '\''Runner'\'' do\n  # Add CastarSDK framework\n  pod '\''CastarSDK'\'', :path => '\''Frameworks'\''/g' Podfile
     echo "Added CastarSDK to Podfile."
   fi
   

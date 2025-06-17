@@ -19,7 +19,31 @@ This guide provides step-by-step instructions for manually adding the CastarSDK 
    cp /path/to/downloaded/CastarSDK.framework ios/Frameworks/
    ```
 
-## Step 2: Configure Xcode Project
+## Step 2: Create a Podspec File
+
+Create a podspec file for the CastarSDK framework:
+
+1. Create a file named `CastarSDK.podspec` in the `ios/Frameworks` directory with the following content:
+   ```ruby
+   Pod::Spec.new do |s|
+     s.name             = 'CastarSDK'
+     s.version          = '1.0.0'
+     s.summary          = 'CastarSDK for iOS'
+     s.description      = 'CastarSDK SDK for iOS helps you make money with iOS apps.'
+     s.homepage         = 'https://castar.com'
+     s.license          = { :type => 'Commercial', :text => 'Copyright (c) 2024 Castar. All rights reserved.' }
+     s.author           = { 'Castar' => 'support@castar.com' }
+     s.source           = { :path => '.' }
+     s.platform         = :ios, '12.0'
+     s.preserve_paths   = 'CastarSDK.framework'
+     s.vendored_frameworks = 'CastarSDK.framework'
+     s.frameworks       = 'Foundation', 'UIKit'
+     s.requires_arc     = true
+     s.swift_version    = '5.0'
+   end
+   ```
+
+## Step 3: Configure Xcode Project
 
 1. Open the Xcode workspace:
    ```bash
@@ -36,7 +60,7 @@ This guide provides step-by-step instructions for manually adding the CastarSDK 
 
 6. Make sure the CastarSDK.framework is listed and its "Embed" option is set to "Embed & Sign"
 
-## Step 3: Update Build Settings
+## Step 4: Update Build Settings
 
 1. Still in Xcode, with the "Runner" target selected, go to the "Build Settings" tab
 
@@ -48,7 +72,7 @@ This guide provides step-by-step instructions for manually adding the CastarSDK 
 
 5. Add `-ObjC` to ensure all Objective-C classes from the framework are loaded
 
-## Step 4: Update Podfile
+## Step 5: Update Podfile
 
 1. Open the `ios/Podfile` file in a text editor
 
@@ -63,7 +87,7 @@ This guide provides step-by-step instructions for manually adding the CastarSDK 
      # ... existing content ...
      
      # Add CastarSDK framework
-     pod 'CastarSDK', :path => 'Frameworks/CastarSDK.framework'
+     pod 'CastarSDK', :path => 'Frameworks'
    end
    ```
 
@@ -72,7 +96,7 @@ This guide provides step-by-step instructions for manually adding the CastarSDK 
    cd ios && pod install
    ```
 
-## Step 5: Run the Project
+## Step 6: Run the Project
 
 1. Build and run the project in Xcode to verify that the framework is correctly integrated
 
@@ -80,6 +104,7 @@ This guide provides step-by-step instructions for manually adding the CastarSDK 
    - Make sure the framework is correctly added and embedded
    - Verify that the framework search paths are correctly set
    - Check that the minimum iOS deployment target is set to 12.0 or higher
+   - Verify that the podspec file is correctly created and referenced in the Podfile
 
 ## Troubleshooting
 
@@ -96,4 +121,9 @@ If you get a "Symbol not found" error, make sure:
 
 ### Incompatible iOS Version
 If you get warnings about iOS version compatibility, make sure:
-- The minimum iOS deployment target is set to 12.0 or higher in both the project settings and Podfile 
+- The minimum iOS deployment target is set to 12.0 or higher in both the project settings and Podfile
+
+### No Podspec Found Error
+If you get a "No podspec found" error, make sure:
+- The CastarSDK.podspec file is correctly created in the Frameworks directory
+- The Podfile references the Frameworks directory, not the CastarSDK.framework directly 

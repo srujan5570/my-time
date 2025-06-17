@@ -33,8 +33,8 @@ target 'Runner' do
 
   flutter_install_all_ios_pods File.dirname(File.realpath(__FILE__))
   
-  # Add CastarSDK framework
-  pod 'CastarSDK', :path => 'Frameworks/CastarSDK.framework'
+  # Add CastarSDK framework using podspec
+  pod 'CastarSDK', :path => 'Frameworks'
 end
 
 post_install do |installer|
