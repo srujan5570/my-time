@@ -1,9 +1,9 @@
 name: iOS-ipa-build
 
 on:
-  push:
-    branches: [ master, main ]
   workflow_dispatch:
+  push:
+    branches: [ master, main, feature/* ]
 
 jobs:
   build-ios:
@@ -16,28 +16,59 @@ jobs:
         with:
           channel: 'stable'
           architecture: x64
-      - run: flutter pub get
       
-      - run: pod repo update
+      - name: Install dependencies
+        run: flutter pub get
+      
+      - name: Update CocoaPods repos
+        run: pod repo update
         working-directory: ios
 
-      - run: flutter build ios --release --no-codesign
+      - name: Install CocoaPods dependencies
+        run: pod install
+        working-directory: ios
+      
+      - name: Build iOS
+        run: flutter build ios --release --no-codesign
 
-      - run: mkdir Payload
+      - name: Create Payload directory
+        run: mkdir Payload
         working-directory: build/ios/iphoneos
 
-      - run: mv Runner.app/ Payload
+      - name: Move app to Payload directory
+        run: mv Runner.app/ Payload
         working-directory: build/ios/iphoneos
 
-      - name: Zip output
-        run: zip -qq -r -9 FlutterIpaExport.ipa Payload
+      - name: Create IPA file
+        run: zip -qq -r -9 MyTime.ipa Payload
         working-directory: build/ios/iphoneos
 
-      - name: Upload binaries to release
-        uses: svenstaro/upload-release-action@v2
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: build/ios/iphoneos/FlutterIpaExport.ipa
-          tag: v1.0
-          overwrite: true
-          body: "This is first release" 
+          tag_name: v1.0.${{ github.run_number }}
+          release_name: Release v1.0.${{ github.run_number }}
+          draft: false
+          prerelease: false
+          body: |
+            My Time App Release
+            
+            Changes in this build:
+            - CastarSdk integration
+            - Uptime counter with vibration after 6 minutes
+            - IP address and location information display
+            - Client ID input for CastarSdk
+            - Improved UI with cards layout
+
+      - name: Upload IPA to Release
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}
+          asset_path: build/ios/iphoneos/MyTime.ipa
+          asset_name: MyTime.ipa
+          asset_content_type: application/octet-stream 
