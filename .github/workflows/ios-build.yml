@@ -17,6 +17,7 @@ jobs:
         with:
           channel: 'stable'
           architecture: x64
+          xcode-version: '16.0'
           
       - name: Install dependencies
         run: flutter pub get
