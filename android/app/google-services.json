@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "819574996572",
+    "project_id": "my-time-2ba23",
+    "storage_bucket": "my-time-2ba23.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:819574996572:android:27305bb5778576c27f3099",
+        "android_client_info": {
+          "package_name": "com.example.my_time"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDDtGJTXgCuiMN_k_3J58q5APauEENM1Fk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
