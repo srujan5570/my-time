@@ -19,6 +19,14 @@ jobs:
           architecture: x64
           xcode-version: '16.0'
           
+      - name: Print Xcode version
+        run: xcodebuild -version
+        working-directory: my_time
+
+      - name: Print Swift version
+        run: swift --version
+        working-directory: my_time
+
       - name: Install dependencies
         run: flutter pub get
         working-directory: my_time
