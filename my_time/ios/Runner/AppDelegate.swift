@@ -2,54 +2,60 @@ import Flutter
 import UIKit
 import CastarSDK
 
-@UIApplicationMain
+@main
 @objc class AppDelegate: FlutterAppDelegate {
   private var castarInstance: Castar?
+  private static let CHANNEL = "com.example.my_time/service"
   
   override func application(
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    let controller : FlutterViewController = window?.rootViewController as! FlutterViewController
-    let channel = FlutterMethodChannel(name: "com.example.my_time/service", binaryMessenger: controller.binaryMessenger)
+    GeneratedPluginRegistrant.register(with: self)
     
-    channel.setMethodCallHandler({
-      [weak self] (call: FlutterMethodCall, result: @escaping FlutterResult) -> Void in
+    // Setup method channel for Flutter communication
+    let controller = window?.rootViewController as! FlutterViewController
+    let methodChannel = FlutterMethodChannel(name: AppDelegate.CHANNEL, binaryMessenger: controller.binaryMessenger)
+    
+    methodChannel.setMethodCallHandler { [weak self] (call, result) in
       guard let self = self else { return }
       
       switch call.method {
       case "startService":
-        guard let args = call.arguments as? [String: Any],
-              let clientId = args["clientId"] as? String else {
-          result(FlutterError(code: "INVALID_ARGUMENTS",
-                            message: "Client ID is required",
-                            details: nil))
-          return
+        if let clientId = call.arguments as? [String: Any],
+           let id = clientId["clientId"] as? String {
+          self.startCastarSdk(withClientId: id)
+          result(true)
+        } else {
+          result(FlutterError(code: "NO_CLIENT_ID", message: "Client ID is null or empty", details: nil))
         }
-        
-        let castarResult = Castar.createInstance(devKey: clientId)
-        switch castarResult {
-        case .success(let instance):
-          self.castarInstance = instance
-          instance.start()
-          result(nil)
-        case .failure(let error):
-          result(FlutterError(code: "CASTAR_ERROR",
-                            message: error.localizedDescription,
-                            details: nil))
-        }
-        
       case "stopService":
-        self.castarInstance?.stop()
-        self.castarInstance = nil
-        result(nil)
-        
+        self.stopCastarSdk()
+        result(true)
       default:
         result(FlutterMethodNotImplemented)
       }
-    })
+    }
     
-    GeneratedPluginRegistrant.register(with: self)
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+  
+  private func startCastarSdk(withClientId clientId: String) {
+    // Create a Castar instance with the provided client ID
+    let result = Castar.createInstance(devKey: clientId)
+    
+    switch result {
+    case .success(let instance):
+      castarInstance = instance
+      castarInstance?.start()
+      print("CastarSDK started successfully with client ID: \(clientId)")
+    case .failure(let error):
+      print("Failed to initialize CastarSDK: \(error.localizedDescription)")
+    }
+  }
+  
+  private func stopCastarSdk() {
+    castarInstance?.stop()
+    print("CastarSDK stopped")
   }
 }
